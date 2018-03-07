@@ -28,6 +28,10 @@
      DefaultHttpContent
      HttpVersion
      LastHttpContent HttpChunkedInput]
+    [io.netty.handler.codec.http.websocketx
+     PingWebSocketFrame
+     TextWebSocketFrame
+     BinaryWebSocketFrame]
     [io.netty.handler.stream
      ChunkedFile ChunkedWriteHandler]
     [java.io
@@ -80,6 +84,31 @@
 
       (.put cached-header-keys s s')
       s')))
+
+
+
+(deftype PingCommand [ping payload])
+
+(defn websocket-frame-coerce [ch ^java.util.concurrent.ConcurrentLinkedQueue pings]
+  (fn [payload]
+    (condp instance? payload
+      CharSequence
+      (TextWebSocketFrame. (bs/to-string payload))
+
+      WebSocketFrame
+      payload
+
+      PingCommand
+      (do
+        (.offer pings (.-ping payload))
+        (if-some [p (.-payload payload)]
+          (->> p
+               (netty/to-byte-buf ch)
+               (PingWebSocketFrame.))
+          (PingWebSocketFrame.)))
+
+      (BinaryWebSocketFrame. (netty/to-byte-buf ch payload)))))
+
 
 (p/def-map-type HeaderMap
   [^HttpHeaders headers

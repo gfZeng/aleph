@@ -551,17 +551,16 @@
        :channel-read
        ([_ ctx msg]
          (try
-           (let [ch (.channel ctx)]
+           (let [ch (.channel ctx)
+
+                 ^java.util.concurrent.ConcurrentLinkedQueue
+                 pings (java.util.concurrent.ConcurrentLinkedQueue.)]
              (cond
 
                (not (.isHandshakeComplete handshaker))
                (do
                  (.finishHandshake handshaker ch msg)
-                 (let [out (netty/sink ch false
-                             #(if (instance? CharSequence %)
-                                (TextWebSocketFrame. (bs/to-string %))
-                                (BinaryWebSocketFrame. (netty/to-byte-buf ctx %)))
-                             (fn [] @desc))]
+                 (let [out (netty/sink ch false (http/websocket-frame-coerce ch pings) #(deref desc))]
 
                    (d/success! d
                      (doto
@@ -594,7 +593,10 @@
                      (netty/buf->array frame))))
 
                (instance? PongWebSocketFrame msg)
-               nil
+                 (loop [ping (.poll pings)]
+                   (when ping
+                     (d/success! ping true)
+                     (recur)))
 
                (instance? PingWebSocketFrame msg)
                (let [frame (.content ^PingWebSocketFrame msg)]

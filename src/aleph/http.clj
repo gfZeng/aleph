@@ -215,6 +215,12 @@
   ([req options]
     (server/initialize-websocket-handler req options)))
 
+(defn ping!
+  ([ws] (ping! ws (d/deferred)))
+  ([ws d] (ping! ws d nil))
+  ([ws d payload]
+   (s/put! ws (aleph.http.core.PingCommand. d payload))))
+
 (let [maybe-timeout! (fn [d timeout] (when d (d/timeout! d timeout)))]
   (defn request
     "Takes an HTTP request, as defined by the Ring protocol, with the extensions defined

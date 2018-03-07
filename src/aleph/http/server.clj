@@ -479,10 +479,11 @@
    ^Channel ch
    ^WebSocketServerHandshaker handshaker]
   (let [d (d/deferred)
-        out (netty/sink ch false
-              #(if (instance? CharSequence %)
-                 (TextWebSocketFrame. (bs/to-string %))
-                 (BinaryWebSocketFrame. (netty/to-byte-buf ch %))))
+
+        ^java.util.concurrent.ConcurrentLinkedQueue
+        pings (java.util.concurrent.ConcurrentLinkedQueue.)
+
+        out (netty/sink ch false (http/websocket-frame-coerce ch pings))
         in (netty/buffered-source ch (constantly 1) 16)]
 
     (s/on-drained in
@@ -527,8 +528,14 @@
                          body
                          (netty/buf->array body))))
 
+                   (instance? PongWebSocketFrame msg)
+                     (loop [ping (.poll pings)]
+                       (when ping
+                         (d/success! ping true)
+                         (recur)))
+
                    (instance? PingWebSocketFrame msg)
-                   (.writeAndFlush ch (PongWebSocketFrame. (netty/acquire (.content msg))))
+                     (.writeAndFlush ch (PongWebSocketFrame. (netty/acquire (.content msg))))
 
                    (instance? CloseWebSocketFrame msg)
                    (.close handshaker ch (netty/acquire msg))))))
